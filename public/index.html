@@ -7,37 +7,61 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <header class="topbar glass">
+    <div class="brand-block">
+      <span class="chip">Operaciones Internas</span>
       <h1>Atomic Benchmark</h1>
-      <p>Inteligencia de menú para operaciones gastronómicas multimarca.</p>
+      <p>Compara tus platos con la competencia en segundos.</p>
     </div>
-    <button id="themeToggle" class="theme-toggle" aria-label="Cambiar tema oscuro/claro">
-      <span class="icon sun">☀️</span>
-      <span class="switch"></span>
-      <span class="icon moon">🌙</span>
-    </button>
+
+    <label class="theme-switch" for="themeToggle" aria-label="Cambiar tema claro/oscuro">
+      <span class="icon">☀️</span>
+      <input id="themeToggle" type="checkbox" />
+      <span class="track"><span class="thumb"></span></span>
+      <span class="icon">🌙</span>
+    </label>
   </header>
 
   <main>
-    <nav class="tabs">
-      <button class="tab active" data-tab="menu">Menú Interno</button>
-      <button class="tab" data-tab="benchmark">Benchmark</button>
-      <button class="tab" data-tab="history">Historial de Benchmark</button>
+    <nav class="tabs glass">
+      <button class="tab active" data-tab="benchmark">Benchmark</button>
+      <button class="tab" data-tab="menu">Menú Interno</button>
+      <button class="tab" data-tab="history">Historial</button>
     </nav>
 
-    <section id="menu" class="panel active">
+    <section id="benchmark" class="panel active">
+      <article class="card glass">
+        <h2>Análisis de Competencia</h2>
+        <p class="helper">Selecciona una marca y pega la URL de la app de delivery para comparar platos similares.</p>
+        <form id="benchmarkForm" class="form-grid">
+          <select name="brand" id="brandSelect" required></select>
+          <input name="url" type="url" placeholder="Pega URL de Rappi / PedidosYa / Mercado Pago Delivery" required />
+          <button class="btn" type="submit">Ejecutar Benchmark</button>
+        </form>
+        <div id="benchmarkStatus" class="status"></div>
+      </article>
+
+      <article class="card glass">
+        <h2>Resultados de Comparación</h2>
+        <div id="benchmarkResults" class="results"></div>
+      </article>
+    </section>
+
+    <section id="menu" class="panel">
       <div class="grid two">
-        <article class="card">
+        <article class="card glass">
           <h2>Carga Masiva (CSV)</h2>
-          <p>Sube una exportación CSV de Google Sheets. Las filas se crean/actualizan por <strong>ID</strong>.</p>
+          <p class="helper">Sube una exportación CSV de Google Sheets. Se actualiza por ID automáticamente.</p>
           <input id="csvInput" type="file" accept=".csv,text/csv" />
           <button id="uploadCsv" class="btn">Procesar CSV</button>
           <small>Columnas esperadas: brand,id,category,name,description,image,fullPrice,promoPrice,discount</small>
           <div id="csvStatus" class="status"></div>
         </article>
 
-        <article class="card">
+        <article class="card glass">
           <h2>Agregar / Editar Plato</h2>
           <form id="dishForm" class="form-grid">
             <input name="brand" placeholder="Marca" required />
@@ -55,7 +79,7 @@
         </article>
       </div>
 
-      <article class="card">
+      <article class="card glass">
         <h2>Biblioteca de Platos</h2>
         <div class="table-wrap">
           <table>
@@ -70,29 +94,12 @@
       </article>
     </section>
 
-    <section id="benchmark" class="panel">
-      <article class="card">
-        <h2>Análisis de Competencia</h2>
-        <form id="benchmarkForm" class="form-grid">
-          <select name="brand" id="brandSelect" required></select>
-          <input name="url" type="url" placeholder="Pega URL de Rappi / PedidosYa / Mercado Pago Delivery" required />
-          <button class="btn" type="submit">Ejecutar Benchmark</button>
-        </form>
-        <div id="benchmarkStatus" class="status"></div>
-      </article>
-
-      <article class="card">
-        <h2>Resultados de Comparación</h2>
-        <div id="benchmarkResults" class="results"></div>
-      </article>
-    </section>
-
     <section id="history" class="panel">
-      <article class="card">
+      <article class="card glass">
         <h2>Análisis Guardados</h2>
         <div id="historyList" class="stack"></div>
       </article>
-      <article class="card">
+      <article class="card glass">
         <h2>Detalle del Análisis Seleccionado</h2>
         <div id="historyDetail" class="results"></div>
       </article>
