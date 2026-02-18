@@ -238,41 +238,70 @@ function extractFromJsonLd(html) {
   return dishes;
 }
 
+
+function safeTrim(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function firstTagText(block, tagsRegex) {
+  const pattern = new RegExp('<(' + tagsRegex + ')[^>]*>([\\s\\S]*?)<\\/\\1>', 'i');
+  const match = block.match(pattern);
+  if (!match) return '';
+  return safeTrim(stripTags(match[2] || ''));
+}
+
+function removePriceFromName(text) {
+  return safeTrim(String(text || '').replace(/\$\s?\d+[\.,]?\d*/g, ''));
+}
+
+function extractDishFromBlock(block) {
+  const plain = stripTags(block);
+  const heading = firstTagText(block, 'h1|h2|h3|h4|strong');
+  const paragraph = firstTagText(block, 'p|small|span');
+
+  let name = removePriceFromName(heading);
+  if (!name) {
+    const lines = plain.split(/\s{2,}|\n/).map((x) => x.trim()).filter(Boolean);
+    name = removePriceFromName(lines.find((l) => /[a-zA-Z]/.test(l) && l.length >= 3 && l.length <= 70) || '');
+  }
+
+  if (!name) return null;
+
+  const prices = (plain.match(/\$\s?\d+[\.,]?\d*/g) || [])
+    .map((p) => Number(p.replace(/[^\d.,]/g, '').replace(',', '.')))
+    .filter(Boolean);
+
+  const description = safeTrim(removePriceFromName(paragraph || plain.replace(name, '').slice(0, 220)));
+  if (!prices.length && textTokens(`${name} ${description}`).length < 2) return null;
+
+  return {
+    name,
+    description,
+    fullPrice: prices[0] || null,
+    promoPrice: prices[1] || null,
+    image: ''
+  };
+}
+
 function extractCompetitorDishes(html) {
   const jsonLdDishes = extractFromJsonLd(html);
   const blocks = html.match(/<(article|li|div|section)[\s\S]*?<\/\1>/gi) || [];
   const dishes = [...jsonLdDishes];
   const seen = new Set(jsonLdDishes.map((d) => `${normalizeText(d.name)}|${normalizeText(d.description)}`));
 
-  for (const block of blocks.slice(0, 900)) {
-    const text = stripTags(block);
-    const lines = text.split(/\s{2,}|\n/).map((x) => x.trim()).filter(Boolean);
-    const name = lines.find((l) => /[a-zA-Z]/.test(l) && l.length > 4 && l.length < 90);
-    if (!name) continue;
+  for (const block of blocks.slice(0, 1200)) {
+    const extracted = extractDishFromBlock(block);
+    if (!extracted) continue;
 
-    const prices = (text.match(/\$\s?\d+[\.,]?\d*/g) || [])
-      .map((p) => Number(p.replace(/[^\d.,]/g, '').replace(',', '.')))
-      .filter(Boolean);
-
-    if (!prices.length && lines.length < 2) continue;
-
-    const description = lines.slice(1, 4).join(' ');
-    const key = `${normalizeText(name)}|${normalizeText(description)}`;
+    const key = `${normalizeText(extracted.name)}|${normalizeText(extracted.description)}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
-    dishes.push({
-      name,
-      description,
-      fullPrice: prices[0] || null,
-      promoPrice: prices[1] || null,
-      image: ''
-    });
-
-    if (dishes.length >= 80) break;
+    dishes.push(extracted);
+    if (dishes.length >= 120) break;
   }
 
-  return dishes;
+  return dishes.filter((dish) => textTokens(`${dish.name} ${dish.description}`).length >= 2);
 }
 
 function buildComparison(ourDishes, competitorDishes) {
@@ -281,7 +310,13 @@ function buildComparison(ourDishes, competitorDishes) {
     let bestScore = 0;
 
     for (const ours of ourDishes) {
+      const nameSignal = tokenJaccard(ours.name, comp.name);
+      const descSignal = tokenJaccard(ours.description, comp.description);
       const score = semanticSimilarity(ours, comp);
+
+      const hasEvidence = nameSignal >= 0.15 || descSignal >= 0.12;
+      if (!hasEvidence) continue;
+
       if (score > bestScore) {
         bestScore = score;
         bestMatch = ours;
@@ -292,7 +327,7 @@ function buildComparison(ourDishes, competitorDishes) {
       competitor: comp,
       ours: bestMatch,
       matchScore: Number((bestScore * 100).toFixed(1)),
-      status: bestScore >= 0.5 ? 'Coincidencia' : (bestScore >= 0.3 ? 'Coincidencia parcial' : 'Sin coincidencia fuerte')
+      status: bestScore >= 0.55 ? 'Coincidencia' : (bestScore >= 0.35 ? 'Coincidencia parcial' : 'Sin coincidencia fuerte')
     };
   });
 }
