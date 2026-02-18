@@ -1,0 +1,10 @@
+{
+  "name": "atomic-benchmark",
+  "version": "1.0.0",
+  "description": "Internal menu benchmark dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  }
+}

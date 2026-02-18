@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel Atomic Benchmark</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <header class="topbar glass">
+    <div class="brand-block">
+      <span class="chip">Operaciones Internas</span>
+      <h1>Atomic Benchmark</h1>
+      <p>Compara tus platos con la competencia en segundos.</p>
+    </div>
+
+    <label class="theme-switch" for="themeToggle" aria-label="Cambiar tema claro/oscuro">
+      <span class="icon">☀️</span>
+      <input id="themeToggle" type="checkbox" />
+      <span class="track"><span class="thumb"></span></span>
+      <span class="icon">🌙</span>
+    </label>
+  </header>
+
+  <main>
+    <nav class="tabs glass">
+      <button class="tab active" data-tab="benchmark">Benchmark</button>
+      <button class="tab" data-tab="menu">Menú Interno</button>
+      <button class="tab" data-tab="history">Historial</button>
+    </nav>
+
+    <section id="benchmark" class="panel active">
+      <article class="card glass">
+        <h2>Análisis de Competencia</h2>
+        <p class="helper">Selecciona una marca y pega la URL de la app de delivery para comparar platos similares.</p>
+        <form id="benchmarkForm" class="form-grid">
+          <select name="brand" id="brandSelect" required></select>
+          <input name="url" type="url" placeholder="Pega URL de Rappi / PedidosYa / Mercado Pago Delivery" required />
+          <button class="btn" type="submit">Ejecutar Benchmark</button>
+        </form>
+        <div id="benchmarkStatus" class="status"></div>
+      </article>
+
+      <article class="card glass">
+        <h2>Resultados de Comparación</h2>
+        <div id="benchmarkResults" class="results"></div>
+      </article>
+    </section>
+
+    <section id="menu" class="panel">
+      <div class="grid two">
+        <article class="card glass">
+          <h2>Carga Masiva (CSV)</h2>
+          <p class="helper">Sube una exportación CSV de Google Sheets. Se actualiza por ID automáticamente.</p>
+          <input id="csvInput" type="file" accept=".csv,text/csv" />
+          <button id="uploadCsv" class="btn">Procesar CSV</button>
+          <small>Columnas esperadas: brand,id,category,name,description,image,fullPrice,promoPrice,discount</small>
+          <div id="csvStatus" class="status"></div>
+        </article>
+
+        <article class="card glass">
+          <h2>Agregar / Editar Plato</h2>
+          <form id="dishForm" class="form-grid">
+            <input name="brand" placeholder="Marca" required />
+            <input name="id" placeholder="ID (único)" required />
+            <input name="category" placeholder="Categoría" required />
+            <input name="name" placeholder="Nombre" required />
+            <input name="description" placeholder="Descripción" />
+            <input name="image" placeholder="URL de imagen" />
+            <input name="fullPrice" type="number" step="0.01" placeholder="Precio lista" required />
+            <input name="promoPrice" type="number" step="0.01" placeholder="Precio promocional" />
+            <input name="discount" type="number" step="0.01" placeholder="Descuento %" />
+            <button class="btn" type="submit">Guardar Plato</button>
+          </form>
+          <div id="formStatus" class="status"></div>
+        </article>
+      </div>
+
+      <article class="card glass">
+        <h2>Biblioteca de Platos</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Marca</th><th>ID</th><th>Categoría</th><th>Nombre</th><th>Precios</th><th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="dishTable"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section id="history" class="panel">
+      <article class="card glass">
+        <h2>Análisis Guardados</h2>
+        <div id="historyList" class="stack"></div>
+      </article>
+      <article class="card glass">
+        <h2>Detalle del Análisis Seleccionado</h2>
+        <div id="historyDetail" class="results"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
