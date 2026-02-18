@@ -297,6 +297,48 @@ function buildComparison(ourDishes, competitorDishes) {
   });
 }
 
+
+function fetchUrl(urlString, headers = {}) {
+  if (typeof fetch === 'function') {
+    return fetch(urlString, { headers }).then(async (res) => ({
+      ok: res.ok,
+      status: res.status,
+      text: await res.text()
+    }));
+  }
+
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(urlString);
+    } catch {
+      reject(new Error('URL inválida'));
+      return;
+    }
+
+    const client = parsed.protocol === 'https:' ? require('https') : require('http');
+    const req = client.request(parsed, { method: 'GET', headers }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          text: data
+        });
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.setTimeout(15000, () => {
+      req.destroy(new Error('Tiempo de espera agotado al consultar URL'));
+    });
+    req.end();
+  });
+}
+
 function serveStatic(req, res, pathname) {
   const filePath = pathname === '/' ? path.join(PUBLIC_DIR, 'index.html') : path.join(PUBLIC_DIR, pathname);
   if (!filePath.startsWith(PUBLIC_DIR)) {
@@ -391,9 +433,9 @@ const server = http.createServer(async (req, res) => {
       const ourDishes = db.dishes.filter((d) => d.brand.toLowerCase() === brand.toLowerCase());
       if (!ourDishes.length) return sendJson(res, 404, { error: 'No se encontraron platos para la marca seleccionada' });
 
-      const response = await fetch(url, { headers: { 'User-Agent': 'Atomic Benchmark Bot' } });
+      const response = await fetchUrl(url, { 'User-Agent': 'Atomic Benchmark Bot' });
       if (!response.ok) return sendJson(res, 400, { error: `No se pudo consultar la URL (${response.status})` });
-      const html = await response.text();
+      const html = response.text;
       const competitorDishes = extractCompetitorDishes(html);
       const results = buildComparison(ourDishes, competitorDishes);
 
