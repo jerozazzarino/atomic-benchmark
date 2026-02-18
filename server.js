@@ -8,6 +8,31 @@ const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const DB_PATH = path.join(ROOT, 'data', 'db.json');
 
+const STOPWORDS = new Set([
+  'con', 'sin', 'para', 'por', 'del', 'las', 'los', 'una', 'unos', 'unas', 'que', 'the', 'and'
+]);
+
+const TOKEN_SYNONYMS = {
+  burger: 'hamburguesa',
+  hamburguesa: 'hamburguesa',
+  hamburguesas: 'hamburguesa',
+  papas: 'fritas',
+  fries: 'fritas',
+  pizza: 'pizza',
+  pizzeta: 'pizza',
+  gaseosa: 'bebida',
+  bebida: 'bebida',
+  soda: 'bebida',
+  pollo: 'pollo',
+  chicken: 'pollo',
+  carne: 'carne',
+  beef: 'carne',
+  queso: 'queso',
+  cheese: 'queso',
+  vegano: 'vegano',
+  vegan: 'vegano'
+};
+
 function readDb() {
   return JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
 }
@@ -61,23 +86,113 @@ function sanitizeDish(dish) {
   };
 }
 
-function textTokens(text) {
+function normalizeText(text) {
   return String(text || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function similarityScore(a, b) {
+function textTokens(text) {
+  const tokens = normalizeText(text)
+    .split(' ')
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+  return tokens.map((token) => TOKEN_SYNONYMS[token] || token);
+}
+
+function tokenJaccard(a, b) {
   const sa = new Set(textTokens(a));
   const sb = new Set(textTokens(b));
   if (!sa.size || !sb.size) return 0;
   const intersection = [...sa].filter((x) => sb.has(x)).length;
   const union = new Set([...sa, ...sb]).size;
   return intersection / union;
+}
+
+function tokenDice(a, b) {
+  const aa = textTokens(a);
+  const bb = textTokens(b);
+  if (!aa.length || !bb.length) return 0;
+  const map = new Map();
+  for (const token of aa) map.set(token, (map.get(token) || 0) + 1);
+  let hits = 0;
+  for (const token of bb) {
+    const n = map.get(token) || 0;
+    if (n > 0) {
+      map.set(token, n - 1);
+      hits++;
+    }
+  }
+  return (2 * hits) / (aa.length + bb.length);
+}
+
+function normalizedLevenshtein(a, b) {
+  const s = normalizeText(a);
+  const t = normalizeText(b);
+  if (!s && !t) return 1;
+  if (!s || !t) return 0;
+
+  const dp = Array.from({ length: s.length + 1 }, () => Array(t.length + 1).fill(0));
+  for (let i = 0; i <= s.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= t.length; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= s.length; i++) {
+    for (let j = 1; j <= t.length; j++) {
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  const dist = dp[s.length][t.length];
+  return 1 - dist / Math.max(s.length, t.length);
+}
+
+function containmentBonus(a, b) {
+  const na = normalizeText(a);
+  const nb = normalizeText(b);
+  if (!na || !nb) return 0;
+  if (na.includes(nb) || nb.includes(na)) return 1;
+  return 0;
+}
+
+function priceSimilarity(ourPrice, compPrice) {
+  if (!ourPrice || !compPrice) return 0.25;
+  const max = Math.max(ourPrice, compPrice);
+  const diff = Math.abs(ourPrice - compPrice);
+  return Math.max(0, 1 - diff / max);
+}
+
+function semanticSimilarity(ours, comp) {
+  const ourName = ours.name || '';
+  const compName = comp.name || '';
+  const ourDesc = ours.description || '';
+  const compDesc = comp.description || '';
+
+  const nameJaccard = tokenJaccard(ourName, compName);
+  const nameDice = tokenDice(ourName, compName);
+  const descJaccard = tokenJaccard(ourDesc, compDesc);
+  const crossSignal = tokenJaccard(`${ours.category} ${ourName}`, `${compName} ${compDesc}`);
+  const editName = normalizedLevenshtein(ourName, compName);
+  const include = containmentBonus(ourName, compName);
+  const price = priceSimilarity(ours.fullPrice, comp.fullPrice);
+
+  const score =
+    nameJaccard * 0.30 +
+    nameDice * 0.20 +
+    editName * 0.16 +
+    descJaccard * 0.12 +
+    crossSignal * 0.12 +
+    include * 0.05 +
+    price * 0.05;
+
+  return Math.max(0, Math.min(1, score));
 }
 
 function stripTags(text) {
@@ -91,15 +206,48 @@ function stripTags(text) {
     .trim();
 }
 
-function extractCompetitorDishes(html) {
-  const blocks = html.match(/<(article|li|div|section)[\s\S]*?<\/\1>/gi) || [];
+function extractFromJsonLd(html) {
+  const scriptBlocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
   const dishes = [];
-  const seen = new Set();
 
-  for (const block of blocks.slice(0, 500)) {
+  for (const block of scriptBlocks) {
+    const jsonText = block.replace(/<script[^>]*>/i, '').replace(/<\/script>$/i, '').trim();
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      continue;
+    }
+
+    const nodes = Array.isArray(parsed) ? parsed : [parsed];
+    for (const node of nodes) {
+      const items = node?.hasMenuSection || node?.hasMenuItem || node?.itemListElement || [];
+      const list = Array.isArray(items) ? items : [items];
+      for (const item of list) {
+        const candidate = item?.item || item;
+        const name = candidate?.name || '';
+        const description = candidate?.description || '';
+        const offer = Array.isArray(candidate?.offers) ? candidate.offers[0] : candidate?.offers;
+        const price = Number(offer?.price || candidate?.price || 0) || null;
+        if (!name) continue;
+        dishes.push({ name: String(name), description: String(description), fullPrice: price, promoPrice: null, image: '' });
+      }
+    }
+  }
+
+  return dishes;
+}
+
+function extractCompetitorDishes(html) {
+  const jsonLdDishes = extractFromJsonLd(html);
+  const blocks = html.match(/<(article|li|div|section)[\s\S]*?<\/\1>/gi) || [];
+  const dishes = [...jsonLdDishes];
+  const seen = new Set(jsonLdDishes.map((d) => `${normalizeText(d.name)}|${normalizeText(d.description)}`));
+
+  for (const block of blocks.slice(0, 900)) {
     const text = stripTags(block);
     const lines = text.split(/\s{2,}|\n/).map((x) => x.trim()).filter(Boolean);
-    const name = lines.find((l) => /[a-zA-Z]/.test(l) && l.length > 4 && l.length < 80);
+    const name = lines.find((l) => /[a-zA-Z]/.test(l) && l.length > 4 && l.length < 90);
     if (!name) continue;
 
     const prices = (text.match(/\$\s?\d+[\.,]?\d*/g) || [])
@@ -108,8 +256,8 @@ function extractCompetitorDishes(html) {
 
     if (!prices.length && lines.length < 2) continue;
 
-    const description = lines.slice(1, 3).join(' ');
-    const key = `${name.toLowerCase()}|${description.toLowerCase()}`;
+    const description = lines.slice(1, 4).join(' ');
+    const key = `${normalizeText(name)}|${normalizeText(description)}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -121,7 +269,7 @@ function extractCompetitorDishes(html) {
       image: ''
     });
 
-    if (dishes.length >= 40) break;
+    if (dishes.length >= 80) break;
   }
 
   return dishes;
@@ -133,10 +281,7 @@ function buildComparison(ourDishes, competitorDishes) {
     let bestScore = 0;
 
     for (const ours of ourDishes) {
-      const scoreName = similarityScore(ours.name, comp.name);
-      const scoreDesc = similarityScore(ours.description, comp.description);
-      const scoreCategory = similarityScore(ours.category, `${comp.name} ${comp.description}`);
-      const score = scoreName * 0.65 + scoreDesc * 0.25 + scoreCategory * 0.1;
+      const score = semanticSimilarity(ours, comp);
       if (score > bestScore) {
         bestScore = score;
         bestMatch = ours;
@@ -147,7 +292,7 @@ function buildComparison(ourDishes, competitorDishes) {
       competitor: comp,
       ours: bestMatch,
       matchScore: Number((bestScore * 100).toFixed(1)),
-      status: bestScore >= 0.25 ? 'Coincidencia' : 'Sin coincidencia fuerte'
+      status: bestScore >= 0.5 ? 'Coincidencia' : (bestScore >= 0.3 ? 'Coincidencia parcial' : 'Sin coincidencia fuerte')
     };
   });
 }
